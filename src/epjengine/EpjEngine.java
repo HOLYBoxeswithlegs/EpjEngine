@@ -1,46 +1,39 @@
 package epjengine;
 
-import org.lwjgl.*;
-import org.lwjgl.opengl.*;
-import org.lwjgl.opengl.Display;
-import org.lwjgl.util.glu.GLU;
-import org.lwjgl.input.*;
-import java.nio.ByteBuffer;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.nio.ByteBuffer;
+import java.util.*;
+
 import javax.imageio.ImageIO;
 
-public class EpjEngine {
+import org.lwjgl.*;
+import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
+import org.lwjgl.opengl.*;
+import org.lwjgl.util.glu.GLU;
 
+public class EpjEngine {
     private int width = 800;
     private int height = 600;
-
+    private static final float RENDER_DISTANCE = 20.0f;
     private float playerX = 0.0f;
-    private float playerY = 0.0f; // Y coordinate (height)
+    private float playerY = 0.0f; 
     private float playerZ = 5.0f;
     private float pitch = 0.0f;
     private float yaw = 0.0f;
-
     private boolean mouseCaptured = true;
-
-    // Jumping variables
     private boolean isJumping = false;
-    private float jumpHeight = 0.54f; // Maximum jump height
-    private float gravity = -0.025f; // Gravity force
-    private float verticalSpeed = 0.0f; // Current vertical speed
-
-    // Texture ID
+    private float jumpHeight = 0.54f;
+    private float gravity = -0.025f;
+    private float verticalSpeed = 0.0f;
     private int wallTexture;
-
-    // Define wall positions (centerX, centerY, centerZ, width, height, depth)
-    private final float[][] walls = {
-        {0.0f, 0.0f, -3.0f, 4.0f, 2.0f, 0.1f},  // Back Wall
-        {0.0f, 0.0f, -6.0f, 4.0f, 2.0f, 0.1f},  // Back Wall
-        {0.0f, 0.0f, -9.0f, 4.0f, 2.0f, 0.1f},  // Back Wall
-    };
+    private List<float[]> walls = new ArrayList<>();
+    private final Random random = new Random();
 
     public void run() {
         init();
+        generateWalls();
         loop();
         cleanUp();
     }
@@ -79,54 +72,134 @@ public class EpjEngine {
         wallTexture = loadTexture("brick.png");
     }
 
+    private void generateWalls() {
+        walls.clear();  // Clear previous walls
+
+        int wallCount = 100;  // Number of walls to generate
+        float wallWidth = 2.0f;
+        float wallHeight = 2.0f;
+        float wallDepth = 0.1f;
+
+        for (int i = 0; i < wallCount; i++) {
+            boolean validPosition = false;
+            float[] wall = new float[7];  // Wall position, dimensions, and rotation
+
+            while (!validPosition) {
+                float x = random.nextFloat() * 40 - 20;  // Random X between -20 and 20
+                float z = random.nextFloat() * 40 - 20;  // Random Z between -20 and 20
+                float rotation = random.nextBoolean() ? 0 : 90;  // Random rotation (0° or 90°)
+
+                wall[0] = x;
+                wall[1] = 0.0f;  // Keep Y at 0 (ground level)
+                wall[2] = z;
+                wall[3] = wallWidth;
+                wall[4] = wallHeight;
+                wall[5] = wallDepth;
+                wall[6] = rotation;  // Store the rotation angle
+
+                // Check for overlap
+                validPosition = true;
+                for (float[] existingWall : walls) {
+                    if (checkOverlap(x, z, wallWidth, wallDepth, rotation, existingWall)) {
+                        validPosition = false;
+                        break;
+                    }
+                }
+            }
+            walls.add(wall);
+        }
+    }
+
+    private boolean checkOverlap(float x, float z, float width, float depth, float rotation, float[] existingWall) {
+        float existingX = existingWall[0];
+        float existingZ = existingWall[2];
+        float existingWidth = existingWall[3];
+        float existingDepth = existingWall[5];
+        float existingRotation = existingWall[6];
+
+        // Adjust boundaries based on rotation
+        if (rotation == 90) {
+            width = depth;
+            depth = width;
+        }
+        if (existingRotation == 90) {
+            existingWidth = existingDepth;
+            existingDepth = existingWidth;
+        }
+
+        // Check for overlap in 2D (XZ plane)
+        return x < existingX + existingWidth && x + width > existingX &&
+               z < existingZ + existingDepth && z + depth > existingZ;
+    }
+    
     private void loop() {
         while (!Display.isCloseRequested()) {
             handleInput();
-            updatePhysics(); // Update physics for jumping
+            updatePhysics();
 
-            // Clear the screen
             GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
-
-            // Set the camera
             GL11.glLoadIdentity();
             GL11.glRotatef(pitch, 1.0f, 0.0f, 0.0f);
             GL11.glRotatef(yaw, 0.0f, 1.0f, 0.0f);
             GL11.glTranslatef(-playerX, -playerY, -playerZ);
 
-            // Render walls
             renderWalls();
-
-            // Update Display
             Display.update();
-            Display.sync(60); // Cap to 60 FPS
+            Display.sync(60);
         }
     }
 
     private void renderWalls() {
-        // Bind the texture for the wall
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, wallTexture);
         for (float[] wall : walls) {
             GL11.glPushMatrix();
             GL11.glTranslatef(wall[0], wall[1], wall[2]);
+            GL11.glRotatef(wall[6], 0.0f, 1.0f, 0.0f);  // Apply rotation
+
             GL11.glBegin(GL11.GL_QUADS);
-            
-            // Specify texture coordinates and vertices for each corner
-            GL11.glTexCoord2f(0.0f, 0.0f); // Bottom-left
+            GL11.glTexCoord2f(0.0f, 0.0f);
             GL11.glVertex3f(-wall[3], -wall[4], 0.0f);
 
-            GL11.glTexCoord2f(1.0f, 0.0f); // Bottom-right
+            GL11.glTexCoord2f(1.0f, 0.0f);
             GL11.glVertex3f(wall[3], -wall[4], 0.0f);
 
-            GL11.glTexCoord2f(1.0f, 1.0f); // Top-right
+            GL11.glTexCoord2f(1.0f, 1.0f);
             GL11.glVertex3f(wall[3], wall[4], 0.0f);
 
-            GL11.glTexCoord2f(0.0f, 1.0f); // Top-left
+            GL11.glTexCoord2f(0.0f, 1.0f);
             GL11.glVertex3f(-wall[3], wall[4], 0.0f);
-
             GL11.glEnd();
+
             GL11.glPopMatrix();
         }
     }
+
+    private boolean checkCollision(float newX, float newY, float newZ) {
+        for (float[] wall : walls) {
+            float wallX = wall[0];
+            float wallY = wall[1];
+            float wallZ = wall[2];
+            float wallWidth = wall[3];
+            float wallHeight = wall[4];
+            float wallDepth = wall[5];
+            float rotation = wall[6];
+
+            // Adjust dimensions based on rotation (90 degrees swaps width and depth)
+            float effectiveWidth = rotation == 90 ? wallDepth : wallWidth;
+            float effectiveDepth = rotation == 90 ? wallWidth : wallDepth;
+
+            // Check if the player's new position collides with the wall boundaries in 3D space
+            boolean collisionX = newX > wallX - effectiveWidth && newX < wallX + effectiveWidth;
+            boolean collisionY = newY > wallY - wallHeight && newY < wallY + wallHeight;
+            boolean collisionZ = newZ > wallZ - effectiveDepth && newZ < wallZ + effectiveDepth;
+
+            if (collisionX && collisionY && collisionZ) {
+                return true;  // Collision detected
+            }
+        }
+        return false;  // No collision
+    }
+
 
     private void handleInput() {
         // Capture mouse
@@ -197,28 +270,14 @@ public class EpjEngine {
 
     private void updatePhysics() {
         if (isJumping) {
-            // Apply gravity
             verticalSpeed += gravity;
             playerY += verticalSpeed;
-
-            // Check if player has landed
-            if (playerY <= 0.0f) { // Assume ground is at Y = 0
-                playerY = 0.0f; // Reset to ground level
-                isJumping = false; // Stop jumping
-                verticalSpeed = 0.0f; // Reset vertical speed
+            if (playerY <= 0.0f) {
+                playerY = 0.0f;
+                isJumping = false;
+                verticalSpeed = 0.0f;
             }
         }
-    }
-
-    private boolean checkCollision(float newX, float newY, float newZ) {
-        for (float[] wall : walls) {
-            if (newX > wall[0] - wall[3] && newX < wall[0] + wall[3] &&
-                newY > wall[1] - wall[4] && newY < wall[1] + wall[4] &&
-                newZ > wall[2] - wall[5] && newZ < wall[2] + wall[5]) {
-                return true; // Collision detected
-            }
-        }
-        return false; // No collision
     }
 
     private int loadTexture(String filePath) {
