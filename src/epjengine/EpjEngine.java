@@ -14,8 +14,8 @@ import org.lwjgl.opengl.*;
 import org.lwjgl.util.glu.GLU;
 
 public class EpjEngine {
-    private int width = 800;
-    private int height = 600;
+    private int width = 1280;
+    private int height = 720;
     private static final float RENDER_DISTANCE = 20.0f;
     private float playerX = 0.0f;
     private float playerY = 0.0f; 
@@ -24,12 +24,29 @@ public class EpjEngine {
     private float yaw = 0.0f;
     private boolean mouseCaptured = true;
     private boolean isJumping = false;
+    // 0.54
     private float jumpHeight = 0.54f;
     private float gravity = -0.025f;
     private float verticalSpeed = 0.0f;
     private int wallTexture;
     private List<float[]> walls = new ArrayList<>();
     private final Random random = new Random();
+    
+    private long lastTime = System.currentTimeMillis();
+    private int frames = 0;
+    private int fps = 0;
+
+    public void displayFPS() {
+        frames++;
+        long currentTime = System.currentTimeMillis();
+
+        if (currentTime - lastTime >= 1000) {
+            fps = frames;
+            frames = 0;
+            lastTime = currentTime;
+            System.out.println("FPS: " + fps);
+        }
+    }
 
     public void run() {
         init();
@@ -61,7 +78,7 @@ public class EpjEngine {
         float fov = 70.0f; // Field of view
         float aspectRatio = (float) width / height;
         float nearPlane = 0.1f;
-        float farPlane = 100.0f;
+        float farPlane = 100000.0f;
 
         // Set perspective projection matrix
         GLU.gluPerspective(fov, aspectRatio, nearPlane, farPlane);
@@ -75,63 +92,61 @@ public class EpjEngine {
     private void generateWalls() {
         walls.clear();  // Clear previous walls
 
-        int wallCount = 100;  // Number of walls to generate
+        int gridSize = 200; // Size of the grid (number of cells per row/column)
+        float cellSize = 4.0f; // Distance between cells in the grid
         float wallWidth = 2.0f;
-        float wallHeight = 2.0f;
+        float wallHeight = 3.0f;
         float wallDepth = 0.1f;
+        float alignmentOffset = wallDepth / 2;  // Small offset to remove gaps
 
-        for (int i = 0; i < wallCount; i++) {
-            boolean validPosition = false;
-            float[] wall = new float[7];  // Wall position, dimensions, and rotation
+        for (int x = -gridSize / 2; x < gridSize / 2; x++) {
+            for (int z = -gridSize / 2; z < gridSize / 2; z++) {
+                boolean placeWall = false;
+                float rotation = 0.0f;
+                float adjustedX = x * cellSize;
+                float adjustedZ = z * cellSize;
 
-            while (!validPosition) {
-                float x = random.nextFloat() * 40 - 20;  // Random X between -20 and 20
-                float z = random.nextFloat() * 40 - 20;  // Random Z between -20 and 20
-                float rotation = random.nextBoolean() ? 0 : 90;  // Random rotation (0° or 90°)
-
-                wall[0] = x;
-                wall[1] = 0.0f;  // Keep Y at 0 (ground level)
-                wall[2] = z;
-                wall[3] = wallWidth;
-                wall[4] = wallHeight;
-                wall[5] = wallDepth;
-                wall[6] = rotation;  // Store the rotation angle
-
-                // Check for overlap
-                validPosition = true;
-                for (float[] existingWall : walls) {
-                    if (checkOverlap(x, z, wallWidth, wallDepth, rotation, existingWall)) {
-                        validPosition = false;
-                        break;
+                // Create L and C shapes in a more structured manner
+                if (random.nextInt(4) == 0) {
+                    // L-shape
+                    if (random.nextBoolean()) {
+                        placeWall = true;
+                        rotation = random.nextBoolean() ? 0.0f : 90.0f;
                     }
+                } else if (random.nextInt(8) == 0) {
+                    // C-shape
+                    placeWall = true;
+                    rotation = 90.0f;
+                } else if (random.nextInt(10) == 0) {
+                    // Single wall to break up space
+                    placeWall = true;
+                    rotation = random.nextBoolean() ? 0.0f : 90.0f;
+                }
+
+                if (placeWall) {
+                    // Adjust wall position based on rotation to align with the grid
+                    if (rotation == 90.0f) {
+                        adjustedX += cellSize / 2 - alignmentOffset;
+                    } else {
+                        adjustedZ += cellSize / 2 - alignmentOffset;
+                    }
+
+                    float[] wall = new float[7];
+                    wall[0] = adjustedX;
+                    wall[1] = 0.0f;  // Y position stays at ground level
+                    wall[2] = adjustedZ;
+                    wall[3] = wallWidth;
+                    wall[4] = wallHeight;
+                    wall[5] = wallDepth;
+                    wall[6] = rotation;
+
+                    // Add wall to list
+                    walls.add(wall);
                 }
             }
-            walls.add(wall);
         }
     }
 
-    private boolean checkOverlap(float x, float z, float width, float depth, float rotation, float[] existingWall) {
-        float existingX = existingWall[0];
-        float existingZ = existingWall[2];
-        float existingWidth = existingWall[3];
-        float existingDepth = existingWall[5];
-        float existingRotation = existingWall[6];
-
-        // Adjust boundaries based on rotation
-        if (rotation == 90) {
-            width = depth;
-            depth = width;
-        }
-        if (existingRotation == 90) {
-            existingWidth = existingDepth;
-            existingDepth = existingWidth;
-        }
-
-        // Check for overlap in 2D (XZ plane)
-        return x < existingX + existingWidth && x + width > existingX &&
-               z < existingZ + existingDepth && z + depth > existingZ;
-    }
-    
     private void loop() {
         while (!Display.isCloseRequested()) {
             handleInput();
@@ -144,6 +159,7 @@ public class EpjEngine {
             GL11.glTranslatef(-playerX, -playerY, -playerZ);
 
             renderWalls();
+            displayFPS();
             Display.update();
             Display.sync(60);
         }
@@ -232,6 +248,10 @@ public class EpjEngine {
         float rightX = (float) Math.sin(Math.toRadians(yaw + 90));
         float rightZ = (float) -Math.cos(Math.toRadians(yaw + 90));
 
+        if (Keyboard.isKeyDown(Keyboard.KEY_LSHIFT)) {
+        	moveSpeed = 0.2f;
+        }
+        
         if (Keyboard.isKeyDown(Keyboard.KEY_W)) {
             if (!checkCollision(playerX + forwardX * moveSpeed, playerY, playerZ + forwardZ * moveSpeed)) {
                 playerX += forwardX * moveSpeed; // Move forward
