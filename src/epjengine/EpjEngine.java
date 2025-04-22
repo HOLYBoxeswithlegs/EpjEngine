@@ -16,7 +16,7 @@ import org.lwjgl.util.glu.GLU;
 public class EpjEngine {
     private int width = 1280;
     private int height = 720;
-    private static final float RENDER_DISTANCE = 20.0f;
+    private static final float RENDER_DISTANCE = 100000.0f;
     private float playerX = 0.0f;
     private float playerY = 0.0f; 
     private float playerZ = 5.0f;
@@ -59,7 +59,7 @@ public class EpjEngine {
         // Initialize Display
         try {
             Display.setDisplayMode(new DisplayMode(width, height));
-            Display.setTitle("Epj Engine");
+            Display.setTitle("old bc3d renderer that i made");
             Display.setInitialBackground(0, 0, 0);
             Display.create();
         } catch (LWJGLException e) {
@@ -78,7 +78,7 @@ public class EpjEngine {
         float fov = 70.0f; // Field of view
         float aspectRatio = (float) width / height;
         float nearPlane = 0.1f;
-        float farPlane = 100000.0f;
+        float farPlane = RENDER_DISTANCE;
 
         // Set perspective projection matrix
         GLU.gluPerspective(fov, aspectRatio, nearPlane, farPlane);
@@ -92,10 +92,10 @@ public class EpjEngine {
     private void generateWalls() {
         walls.clear();  // Clear previous walls
 
-        int gridSize = 200; // Size of the grid (number of cells per row/column)
+        int gridSize = 100; // Size of the grid (number of cells per row/column)
         float cellSize = 4.0f; // Distance between cells in the grid
         float wallWidth = 2.0f;
-        float wallHeight = 3.0f;
+        float wallHeight = 5f;
         float wallDepth = 0.1f;
         float alignmentOffset = wallDepth / 2;  // Small offset to remove gaps
 
